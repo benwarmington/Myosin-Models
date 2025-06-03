@@ -8,56 +8,30 @@ using ProgressLogging
 using FFTW
 GLMakie.activate!();
 
+# alpha is viscous resistance, beta is auxotonix boundary constraint, gamma is isotonic force. Don't change switch 
+
 alpha = 0.2;
 beta = 0;
 gamma = 0.2;
 switch = 0;
-# StS = 0.8;
-#StS = 0.22;
-#StS = 0.18
-StS = 0.9;
-# rot_per = 7.1667*StS;
-# tooth_per = (6.5*StS);
 
-#Bound for L_t checking
-#rot_per = 1.7;#8.6*StS
-#tooth_per = 0.1;#(7.8*StS)
+# StS is the same as `c` in the paper. This must be between 0 and 1 and represents the range of oscillator contact
+
+StS = 0.9;
+
+# Rotor and tooth period is set as required. The preset is physiologically determined
 
 rot_per = 8.6*StS
 tooth_per = (7.8*StS)/3
 
-rot_per = 3
-tooth_per = 2.2
-
-
-#StS_Checking param!
-#rot_per = 1.85
-#tooth_per = (1.75)
-
+# Number of rotors/motors and the time (time is dimensionless and measured as a function of the natural period of an oscillator)
 
 rot_num = 11;
 time = 100;
 
-# if rot_per > tooth_per
-#     phase_diff = 2*pi - (mod(rot_per, tooth_per)/tooth_per)*2*pi;
-# elseif tooth_per > rot_per
-#     phase_diff = (mod(tooth_per, rot_per)/tooth_per)*2*pi;
-# else
-#     phase_diff = 0;
-# end
 
 
-u0 = zeros(rot_num+1);
-du0 = zeros(rot_num+1);
-
-for i = 1:rot_num
-    du0[i+1] = 2*pi;
-    u0[i+1] = 0;#rand()*2*pi#mod(phase_diff*i, 2*pi);
-end
-
-
-
-
+# Heavyside function allowing detatchment and determining if a motor *could* be contacted
 
 function H(theta, StS)
 
@@ -75,7 +49,11 @@ function H(theta, StS)
 
 end
 
+# P is the parameter tuple
+
 p = (alpha, beta, switch, StS, rot_per, tooth_per, rot_num, gamma);
+
+# f2 is the non-linear function to be solved. The IDA DAE will try to minimise the residuals, kept in the out array
 
 function f2(out, du, u, p, t)
 
@@ -122,19 +100,6 @@ function f2(out, du, u, p, t)
     end
 
 
-    # if u[1] > 300    
-    #      spring = beta;
-        
-    # # elseif t > 50 && t < 100
-    # #     resis = 0
-
-    # else 
-
-    #     spring = 0;
-
-    # end
-
-
       
        spring = beta
 
@@ -166,7 +131,8 @@ function f2(out, du, u, p, t)
 
 end
 
-
+# This is an event function - it looks for when contact happens between teeth and rotors
+# and allows for step changes in force in the system without the solver exploding
 
 function condition1(out, u, t, integrator) 
 
@@ -201,6 +167,7 @@ function condition1(out, u, t, integrator)
 
 end
 
+# The affect function takes the result of the integrator function, which only identifies when events should happen, and applies a change.
 
 function affect!(integrator, idx)
     rot_num = Int(integrator.p[7]);
@@ -211,149 +178,141 @@ function affect!(integrator, idx)
     end
 end
 
-cb = VectorContinuousCallback(condition1, affect!, rot_num)
+#VCC is the event framework
 
+cb = VectorContinuousCallback(condition1, affect!, rot_num)
 
 Force_Vel_Data = zeros(20, 3)
 
-#for c = 4:1:20
+
 c = 1;
-    #StS = c*0.02;
-    # alpha = 2;
-
-    # rot_per = 1
-   # tooth_per = 0.11*c
-
-   # alpha = c;
-    
-    if rot_per > tooth_per
-        phase_diff =  mod(((tooth_per - rot_per)/tooth_per)*2*pi, 2*pi);
-    elseif tooth_per > rot_per
-        phase_diff =   mod(((tooth_per -  rot_per)/tooth_per)*2*pi, 2*pi);
-    else
-        phase_diff = 0;
-    end
-    
-    #phase_diff = ((2*pi)/40)*c;
-
-    u0 = zeros(rot_num+1);
-    du0 = zeros(rot_num+1);
-    
-    for i = 1:rot_num
-        du0[i+1] = 2*pi;
-        u0[i+1] = 0;#mod(i*phase_diff, 2*pi);
-    end
-    
-
-
-
-
-
-
-   # alpha = gamma; 
-    tspan = (0.0, time)
-    differential_vars = zeros(rot_num+1)
-
-    @inbounds for i = 1:rot_num+1
-        differential_vars[i] = true;
-    end
-
-    p = (alpha, beta, switch, StS, rot_per, tooth_per, rot_num, gamma);
-    prob = DAEProblem(f2, du0, u0, tspan, p, differential_vars = differential_vars)
-
-    #global p = (alph, beta, switch, StS, rot_per, tooth_per, rot_num, gamma);
-
-    sol = solve(prob, IDA(), maxiters = 10^9, callback=cb,  dtmax = 1e-4, reltol = 1e-4, abstol = 1e-6, progress=true, progress_steps=1)
-    #sol = solve(prob, IDA(linear_solver=:GMRES), maxiters = 20^6, dtmax = 2e-5, reltol = 1e-7, abstol = 1e-8)
   
-    #rot1 = [cos(u[4]) for u in sol.u]
-    #t = sol.t;
-    f = Figure(size = (500, 300))
-    ax1 = Axis(f[1, 1], xlabel = "Time", ylabel = "Displacement")
-    ax2 = Axis(f[2, 1], xlabel = "Time", ylabel = "No. Bound Motors")
-    ax3 = Axis(f[3, 1], xlabel = "Time", ylabel = "Velocity")
-    ax4 = Axis(f[4, 1], xlabel = "Time", ylabel = "x pos")
-    tvals = (time/20000:time/20000:time);
-    uvals = sol.(tvals);
-    uvals = hcat(uvals...);
+# This conditional allows you to start the system pre organised, if preffered  
+
+if rot_per > tooth_per
+    phase_diff =  mod(((tooth_per - rot_per)/tooth_per)*2*pi, 2*pi);
+elseif tooth_per > rot_per
+    phase_diff =   mod(((tooth_per -  rot_per)/tooth_per)*2*pi, 2*pi);
+else
+    phase_diff = 0;
+end
+
+# These are the rotor initial conditions the options for u0 are zerod, pre organised and random
+
+u0 = zeros(rot_num+1);
+du0 = zeros(rot_num+1);
+
+for i = 1:rot_num
+    du0[i+1] = 2*pi;
+    u0[i+1] = 0;
+    #u0[i+1] = mod(i*phase_diff, 2*pi);
+    #u0[i+1] = rand()*2*pi
+end
 
 
-    #displacements = [u[:] for u in sol.u];
-    #displacements = hcat(displacements...);
+tspan = (0.0, time)
+differential_vars = zeros(rot_num+1)
 
-    vel = zeros(length(tvals), length(uvals[:, 1]));
-    bound = zeros(length(tvals), length(uvals[1, :]));
+@inbounds for i = 1:rot_num+1
+    differential_vars[i] = true;
+end
 
-    @inbounds for j = 1:1:length(uvals[:, 1])
-        @inbounds for i = 2:1:length(tvals)
-            vel[i, j] = (uvals[j, i] - uvals[j, i-1])/(tvals[i] - tvals[i-1]);
-            if vel[i, j] <  6.2
-                bound[i, j] = 1;
-            end
+# The numerical framework
+
+p = (alpha, beta, switch, StS, rot_per, tooth_per, rot_num, gamma);
+prob = DAEProblem(f2, du0, u0, tspan, p, differential_vars = differential_vars)
+sol = solve(prob, IDA(), maxiters = 10^9, callback=cb,  dtmax = 1e-4, reltol = 1e-4, abstol = 1e-6, progress=true, progress_steps=1)
+
+# The rest of this is just various ways to manipulate the data and showsome of the results.
+
+
+#rot1 = [cos(u[4]) for u in sol.u]
+#t = sol.t;
+f = Figure(size = (500, 300))
+ax1 = Axis(f[1, 1], xlabel = "Time", ylabel = "Displacement")
+ax2 = Axis(f[2, 1], xlabel = "Time", ylabel = "No. Bound Motors")
+ax3 = Axis(f[3, 1], xlabel = "Time", ylabel = "Velocity")
+ax4 = Axis(f[4, 1], xlabel = "Time", ylabel = "x pos")
+tvals = (time/20000:time/20000:time);
+uvals = sol.(tvals);
+uvals = hcat(uvals...);
+
+
+#displacements = [u[:] for u in sol.u];
+#displacements = hcat(displacements...);
+
+vel = zeros(length(tvals), length(uvals[:, 1]));
+bound = zeros(length(tvals), length(uvals[1, :]));
+
+@inbounds for j = 1:1:length(uvals[:, 1])
+    @inbounds for i = 2:1:length(tvals)
+        vel[i, j] = (uvals[j, i] - uvals[j, i-1])/(tvals[i] - tvals[i-1]);
+        if vel[i, j] <  6.2
+            bound[i, j] = 1;
         end
-    end 
-    tot_bound = zeros(length(tvals), 1);
-    tot_mot_frac = zeros(length(tvals), 1);
-    @inbounds for i = 1:1:length(tvals)
-
-        tot_bound[i] = sum(bound[i, 2:end]);
-        tot_mot_frac[i] = tot_bound[i]/(rot_num);
-
     end
-    av_vel = zeros(length(tvals))
-    av_mot_frac = zeros(length(tvals))
-    window = 100;
-    for i = 1:1:length(tvals)-window
-        av_vel[i] = sum(vel[i:i+window, 1])/window;
-        av_mot_frac[i] = sum(tot_mot_frac[i:i+window])/window;
-    end
-    display(gamma)
-    display(sum(tot_mot_frac[16001:20000])/4000);
-    display(sum(vel[16001:20000])/4000); 
-   phase_diff = zeros(rot_num-1, 1)
-    for i = 1:1:rot_num-1
-        phase_diff[i] = mod(uvals[i+2, 19900] - uvals[i+1, 19900], 2*pi)
-    end
-    av_phase_diff = sum(phase_diff[1:end])/length(phase_diff[1:end])
-    display(av_phase_diff)
+end 
+tot_bound = zeros(length(tvals), 1);
+tot_mot_frac = zeros(length(tvals), 1);
+@inbounds for i = 1:1:length(tvals)
 
+    tot_bound[i] = sum(bound[i, 2:end]);
+    tot_mot_frac[i] = tot_bound[i]/(rot_num);
 
-    
-     index = c;
-    
-    
-   Force_Vel_Data[index, 3] = sum(vel[16001:20000])/4000;
-   Force_Vel_Data[index, 2] = sum(tot_mot_frac[16001:20000])/4000;
-   Force_Vel_Data[index, 1] = alpha;
-
-
-
-    n = length(uvals[1, :])
-    fs = (20000/time)
-    frequencies = (0:n-1)*(fs/n)
+end
+av_vel = zeros(length(tvals))
+av_mot_frac = zeros(length(tvals))
+window = 100;
+for i = 1:1:length(tvals)-window
+    av_vel[i] = sum(vel[i:i+window, 1])/window;
+    av_mot_frac[i] = sum(tot_mot_frac[i:i+window])/window;
+end
+display(gamma)
+display(sum(tot_mot_frac[16001:20000])/4000);
+display(sum(vel[16001:20000])/4000); 
+phase_diff = zeros(rot_num-1, 1)
+for i = 1:1:rot_num-1
+    phase_diff[i] = mod(uvals[i+2, 19900] - uvals[i+1, 19900], 2*pi)
+end
+av_phase_diff = sum(phase_diff[1:end])/length(phase_diff[1:end])
+display(av_phase_diff)
 
 
 
-    #sig_mean = sum(Disps[1, :])/length(Disps[1, :])
-
-    fft_result = fft(cos.(uvals[30, :] ))
-    magnitude = abs.(fft_result)
+index = c;
 
 
-    normalised_magnitude = magnitude/n
-
-    lines!(ax2, frequencies[1:800], normalised_magnitude[1:800], color = :blue, linewidth = 2)
-
-    (ind, loc) = findmax(normalised_magnitude[1:800])
-    p_freq = frequencies[loc]
-    phase_diff =  ((tooth_per - rot_per)/tooth_per)*2*pi;
-    wave_per = ((2*pi)/abs(phase_diff))*rot_per
-
-    wave_prop_vel = p_freq*wave_per
-    display(wave_prop_vel)
-#end
+Force_Vel_Data[index, 3] = sum(vel[16001:20000])/4000;
+Force_Vel_Data[index, 2] = sum(tot_mot_frac[16001:20000])/4000;
+Force_Vel_Data[index, 1] = alpha;
 
 
+
+n = length(uvals[1, :])
+fs = (20000/time)
+frequencies = (0:n-1)*(fs/n)
+
+
+
+#sig_mean = sum(Disps[1, :])/length(Disps[1, :])
+
+fft_result = fft(cos.(uvals[30, :] ))
+magnitude = abs.(fft_result)
+
+
+normalised_magnitude = magnitude/n
+
+lines!(ax2, frequencies[1:800], normalised_magnitude[1:800], color = :blue, linewidth = 2)
+
+(ind, loc) = findmax(normalised_magnitude[1:800])
+p_freq = frequencies[loc]
+phase_diff =  ((tooth_per - rot_per)/tooth_per)*2*pi;
+wave_per = ((2*pi)/abs(phase_diff))*rot_per
+
+wave_prop_vel = p_freq*wave_per
+display(wave_prop_vel)
+
+# The following commented out is all various data processing to access different info about the model results
 
 #FileIO.save("C:/Users/yp20984/OneDrive - University of Bristol/Julia/TestJulia/Vel/LTsweep_LR_2_75.jld2", "Data", Force_Vel_Data)
 
@@ -438,18 +397,6 @@ lines!(ax2, tvals[10:10:end], tot_mot_frac[10:10:end, 1])
 lines!(ax2, tvals[10:10:end], av_mot_frac[10:10:end, 1])
 lines!(ax3, tvals[1:1:end], vel[1:1:end, 1])
 lines!(ax3, tvals[1:1:end], av_vel[1:1:end])
-#lines!(ax4, 1:50, sin.(uvals[2:51, 16000]))
-#heatmap!(tvals[2000:2:20000], rot_per.*(1:50), cos.(transpose(uvals[2:51, 2000:2:20000])))
-#lines!(ax3, uvals[1, 10:10:end], av_vel[10:10:end, 1])
 
 display(f)
 
-#FileIO.save("/user/work/yp20984/Vel/Vel_for_RL_2_25.jld2", "Data", Force_Vel_Data)
-
-#display(av_mot_frac[end-window-5]);
-#display(av_vel[end-window-5]);
-# fig2 = Figure(size = (180, 130))
-# ax2 = Axis(fig2[1, 1], xlabel = "L_t", ylabel = "No. Bound Motors")
-# lines!(ax2, 0.11*5:0.11:20*0.11, Force_Vel_Data[5:20, 2], linewidth = 2, color = :black)
-# display(fig2)
-# save("Cont_L_t.png", fig2, px_per_unit = 8)
