@@ -14,10 +14,10 @@ switch = 0;
 StS = 0.22;
 rot_per = 7.1667*StS;
 tooth_per = 6.5*StS;
-rot_num = 50;
-time = 400;
+rot_num = 56;
+time = 50;
 fil_num = 3;
-Alpha = 1.5;
+Alpha = 6;
 Beta = 0.4*fil_num;
 overlap = 1;
 
@@ -235,68 +235,58 @@ cb = VectorContinuousCallback(condition1, affect!, fil_num*rot_num +1+ fil_num)
 sol = solve(prob, IDA(), maxiters = 10^7, callback=cb, dtmax = 1e-4, reltol = 1e-4, abstol = 1e-6, progress=true, progress_steps=1)
 
 
-#sol = solve(prob, IDA(linear_solver=:GMRES), maxiters = 20^6, dtmax = 2e-5, reltol = 1e-7, abstol = 1e-8)
-#displacement1 = [u[1] for u in sol.u]
-#displacement2 = [u[2] for u in sol.u]
-#velocity1 = [du[1] for du in sol.u]
-#displacement3 = [u[N + 2 + 1] for u in sol.u]
-#displacement4 = [u[2*N + 3 + 1] for u in sol.u]
-#displacement5 = [u[3*N + 4 + 1] for u in sol.u]
-#rot1 = [sin(u[3]) for u in sol.u]
-t = sol.t;
-# tvals = (time/40000:time/40000:time);
-# uvals = sol.(tvals);
-# uvals = hcat(uvals...);
-displacements = [u[:] for u in sol.u];
-displacements = hcat(displacements...);
+tvals = (time/10000:time/10000:time);
+uvals = sol.(tvals);
+uvals = hcat(uvals...);
 
-# vel = zeros(length(tvals), length(uvals[:, 1]));
-# bound = zeros(length(tvals), length(uvals[1, :]));
 
-# for j = 1:1:length(uvals[:, 1])
-#     for i = 2:1:length(tvals)
-#         vel[i, j] = (uvals[j, i] - uvals[j, i-1])/(tvals[i] - tvals[i-1]);
-#         if vel[i, j] <  6.2
-#             bound[i, j] = 1;
-#         end
-#     end
-# end 
-# tot_bound = zeros(length(tvals), 1);
-# tot_mot_frac = zeros(length(tvals), 1);
-# for i = 1:1:length(tvals)
 
-#     tot_bound[i] = sum(bound[i, :]);
-#     tot_mot_frac[i] = tot_bound[i]/(fil_num*rot_num);
+vel = zeros(length(tvals), length(uvals[:, 1]));
+bound = zeros(length(tvals), length(uvals[1, :]));
 
-# end
-# fil_bound = zeros(length(tvals), fil_num);
-# fil_mot_frac = zeros(length(tvals), fil_num);
-# for j = 1:1:fil_num
-#     for i = 1:1:length(tvals)
-#         fil_bound[i, j] =  sum(bound[i, (j-1)*rot_num + j + 1:(j-1)*rot_num + j + 1 + rot_num]);
-#         fil_mot_frac[i, j] = fil_bound[i, j]/rot_num;
-#     end   
-# end
-# av_vel = zeros(length(tvals))
-# window = 60;
-# for i = 1:1:length(tvals)-window
-#     av_vel[i] = sum(vel[i:i+window, 1])/window;
-# end
+for j = 1:1:length(uvals[:, 1])
+    for i = 2:1:length(tvals)
+        vel[i, j] = (uvals[j, i] - uvals[j, i-1])/(tvals[i] - tvals[i-1]);
+        if vel[i, j] <  6.2
+            bound[i, j] = 1;
+        end
+    end
+end 
+tot_bound = zeros(length(tvals), 1);
+tot_mot_frac = zeros(length(tvals), 1);
+for i = 1:1:length(tvals)
+
+    tot_bound[i] = sum(bound[i, :]);
+    tot_mot_frac[i] = tot_bound[i]/(fil_num*rot_num);
+
+end
+fil_bound = zeros(length(tvals), fil_num);
+fil_mot_frac = zeros(length(tvals), fil_num);
+for j = 1:1:fil_num
+    for i = 1:1:length(tvals)
+        fil_bound[i, j] =  sum(bound[i, (j-1)*rot_num + j + 1:(j-1)*rot_num + j + 1 + rot_num]);
+        fil_mot_frac[i, j] = fil_bound[i, j]/rot_num;
+    end   
+end
+av_vel = zeros(length(tvals))
+window = 60;
+for i = 1:1:length(tvals)-window
+    av_vel[i] = sum(vel[i:i+window, 1])/window;
+end
  
-# f = Figure(size = (500, 600))
-# ax1 = Axis(f[1, 1], xlabel = "Time", ylabel = "Displacement")
-# ax2 = Axis(f[2, 1], xlabel = "Velocity", ylabel = "Force")
-# ax3 = Axis(f[3, 1], xlabel = "Time", ylabel = "No. Bound Motors")
-# ax4 = Axis(f[4, 1], xlabel = "Time", ylabel = "Sub disp")
-# lines!(ax1, t[10:10:end],  displacement1[10:10:end, 1]*(6/StS)) 
-
-# lines!(ax2, vel[10:10:end, 1],  uvals[1, 10:10:end])
-# lines!(ax2, av_vel[10:10:end],  uvals[1, 10:10:end])
-# lines!(ax3, tvals[10:10:end], tot_mot_frac[10:10:end, 1])
-# for j = 1:1:fil_num
-#     lines!(ax4, tvals[1:1:end], (uvals[(j-1)*rot_num + j + 1, 1:1:end]-uvals[1, 1:1:end])*(6/StS));
-# end
-# #lines!(ax4, t[10:10:end], (displacement2[10:10:end, 1] - displacement1[10:10:end, 1])*(6/StS))
+f = Figure(size = (500, 600))
+ax1 = Axis(f[1, 1], xlabel = "Time", ylabel = "Displacement")
+ax2 = Axis(f[2, 1], xlabel = "Velocity", ylabel = "Force")
+ax3 = Axis(f[3, 1], xlabel = "Time", ylabel = "No. Bound Motors")
+ax4 = Axis(f[4, 1], xlabel = "Time", ylabel = "Sub disp")
+lines!(ax1, tvals[10:10:end],  uvals[1, 10:10:end]*(6/StS)) 
+lines!(ax2, vel[10:10:end, 1],  uvals[1, 10:10:end])
+lines!(ax2, av_vel[10:10:end],  uvals[1, 10:10:end])
+lines!(ax3, tvals[10:10:end], tot_mot_frac[10:10:end, 1])
+for j = 1:1:fil_num
+    lines!(ax4, tvals[1:1:end], (uvals[(j-1)*rot_num + j + 1, 1:1:end]-uvals[1, 1:1:end])*(6/StS));
+end
+# lines!(ax4, tvals[10:10:end], (displacement2[10:10:end, 1] - displacement1[10:10:end, 1])*(6/StS))
 # for i = 1:1:fil_num
 #     lines!(ax3, tvals[1:1:end], fil_mot_frac[1:1:end, i])
 # end
@@ -308,4 +298,4 @@ displacements = hcat(displacements...);
 # #lines!(ax1, t[2:2:end], displacement5[2:2:end, 1])
 # #lines!(ax1, t[2:2:end],  -rot1[2:2:end, 1])
 
-# display(f)
+ display(f)
