@@ -1,6 +1,6 @@
 **DCR model available**
 
-`DCR model available' is the single filament DCR model. Option for StS is equivalent to `c' within the body of work. Other options are the same. You will have to add the differential equations, GLMakie, Sundials, ProgressLogging and FFTW packages for it to run. 
+'DCR model available' is the single filament DCR model. Option for StS is equivalent to 'c' within the body of work. Other options are the same. You will have to add the differential equations, GLMakie, Sundials, ProgressLogging and FFTW packages for it to run. 
 The outputs of the program are UVALS, a 20000 by N+1 matrix giving the states of the rotors and backbone; vel, a matrix of the same size giving the angular velocities of rotors and the linear velocity of the filament; bound, a matrix of the same size with a boolean 
 dictating whether a motor is in contact or not; phase_diff, a matrix showing the phase difference between neighboring rotors.  
 
